@@ -1,4 +1,4 @@
-FROM php:5.6-cli
+FROM php:7-cli
 
 # The basics that drupal needs to function
 RUN apt-get update && apt-get install -y \
@@ -29,10 +29,27 @@ RUN pecl install xdebug \
     && docker-php-ext-enable xdebug
 
 # Install memcached so we can talk to a memcache server.
-RUN apt-get update && apt-get install -y libmemcached-dev \
-    --no-install-recommends && rm -r /var/lib/apt/lists/* \
-    && pecl install memcached \
-    && docker-php-ext-enable memcached
+# There isn't pecl support apprently for php7 memcache yet so we need to compile ourselves.
+RUN apt-get update \
+    && buildDeps=" \
+            git \
+            libmemcached-dev \
+            zlib1g-dev \
+    " \
+    && doNotUninstall=" \
+            libmemcached11 \
+            libmemcachedutil2 \
+    " \
+    && apt-get install -y $buildDeps --no-install-recommends \
+    && rm -r /var/lib/apt/lists/* \
+    \
+    && docker-php-source extract \
+    && git clone --branch php7 https://github.com/php-memcached-dev/php-memcached /usr/src/php/ext/memcached/ \
+    && docker-php-ext-install memcached \
+    \
+    && docker-php-source delete \
+    && apt-mark manual $doNotUninstall \
+    && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false $buildDeps
 
 # Additional Packages for use as a cli container.
 RUN apt-get update && apt-get install -y \
